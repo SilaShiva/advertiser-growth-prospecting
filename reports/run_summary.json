@@ -1,0 +1,12 @@
+{
+  "seed": 42,
+  "elapsed_sec": 19.9,
+  "rows": 4337,
+  "features": 55,
+  "champion_conversion": "lgbm_classifier",
+  "champion_spend": "hist_gbr",
+  "test_pr_auc": 0.3405910732748966,
+  "test_roc_auc": 0.8250851008117308,
+  "top_decile_lift": 3.157894736842105,
+  "expected_pipeline_inr": 4490461.607109368
+}

@@ -5,7 +5,7 @@
       "name": "row_count_min",
       "severity": "FAIL",
       "passed": true,
-      "detail": "842 rows (min 700)"
+      "detail": "4,337 rows (min 700)"
     },
     {
       "name": "id_uniqueness",
@@ -29,7 +29,7 @@
       "name": "null_share_numeric",
       "severity": "WARN",
       "passed": true,
-      "detail": "worst null share 0.058 in 'app_installs_est' (max 0.15)"
+      "detail": "worst null share 0.063 in 'app_installs_est' (max 0.15)"
     },
     {
       "name": "category_cardinality",
