@@ -106,5 +106,5 @@ def build_features(panel: pd.DataFrame, stats: dict, cfg: dict) -> pd.DataFrame:
             df[col] = df[col].fillna(med if med is not None else 0.0)
 
     keep = feature_cols + ["brand_id", "snapshot_quarter", TARGET]
-    keep = [c for c in keep if c in df.columns]
+    keep = [c for c in dict.fromkeys(keep) if c in df.columns]  # dedupe, keep order
     return df[keep]
