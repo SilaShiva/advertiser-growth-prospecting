@@ -24,6 +24,10 @@ DROP_COLS = [
 ]
 TARGET = "converted_next_quarter"
 
+# Low-cardinality string columns encoded as ordinals (train-fit mapping
+# held in stats so inference encodes identically; unseen -> -1).
+CAT_CODE_COLS = ["region", "contact_channel", "last_action"]
+
 
 def fit_stats(train: pd.DataFrame, cfg: dict) -> dict:
     """Fit all train-only statistics used downstream."""
@@ -35,6 +39,8 @@ def fit_stats(train: pd.DataFrame, cfg: dict) -> dict:
         "winsor_hi": numeric.quantile(fcfg["winsorize_quantiles"][1]).to_dict(),
         "top_categories": train["category"].value_counts()
                           .head(fcfg["categories_top_n"]).index.tolist(),
+        "cat_mappings": {c: {v: i for i, v in enumerate(sorted(train[c].dropna().unique().tolist()))}
+                         for c in CAT_CODE_COLS if c in train.columns},
     }
     return stats
 
@@ -71,6 +77,11 @@ def build_features(panel: pd.DataFrame, stats: dict, cfg: dict) -> pd.DataFrame:
                     df[f"delta_{w}q_{col}"] = np.where(
                         prev > 0, (df[col] - prev) / prev, np.nan)
 
+    # --- ordinal-encode low-cardinality strings (train-fit mapping) ---
+    for col, mapping in stats.get("cat_mappings", {}).items():
+        if col in df.columns:
+            df[f"code_{col}"] = df[col].map(mapping).fillna(-1).astype("int64")
+
     # --- days since contact capped (older than 2 quarters saturates) ---
     df["days_since_contact_capped"] = df["days_since_contact"].clip(upper=180)
 
@@ -83,7 +94,8 @@ def build_features(panel: pd.DataFrame, stats: dict, cfg: dict) -> pd.DataFrame:
     # --- winsorize + impute numeric features with train stats ---
     feature_cols = [c for c in df.columns
                     if c not in DROP_COLS + [TARGET, "category", "category_bucket"]
-                    and not c.startswith("snapshot")]
+                    and not c.startswith("snapshot")
+                    and c not in CAT_CODE_COLS]
     for col in feature_cols:
         if col in df.columns and pd.api.types.is_numeric_dtype(df[col]):
             lo = stats["winsor_lo"].get(col)

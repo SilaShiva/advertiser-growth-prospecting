@@ -138,32 +138,47 @@ def generate_snapshots(cfg: dict | None = None) -> pd.DataFrame:
                 "share_of_voice_gap": float(np.clip(rng.normal(0.35, 0.2), -0.5, 1.0)),
                 "historical_ad_spend_inr": hist_spend,
                 "digital_maturity": float(np.clip(maturity + t, 0, 1)),
-                "agency_flag": int(rng.random() < 0.25 + 0.4 * maturity),
+                # Readiness signals track maturity so the latent propensity
+                # is genuinely learnable from observables (not independent noise).
+                "agency_flag": int(rng.random() < 0.15 + 0.55 * maturity),
                 "marketing_team_size": int(rng.poisson(1 + 6 * maturity)),
-                "has_d2c_store": int(rng.random() < 0.2 + 0.5 * maturity),
+                "has_d2c_store": int(rng.random() < 0.10 + 0.55 * maturity),
                 "marketplace_rating": float(np.clip(rng.normal(4.1, 0.4), 1.0, 5.0)),
                 "contact_channel": rng.choice(CONTACT_CHANNELS),
                 "outreach_attempts": int(rng.poisson(2.5) + 1),
-                "demo_given": int(rng.random() < 0.3 + 0.3 * maturity),
-                "last_action": rng.choice(LAST_ACTIONS),
+                "demo_given": int(rng.random() < 0.10 + 0.55 * maturity),
+                # ghosted probability falls with maturity
+                "last_action": rng.choice(
+                    LAST_ACTIONS,
+                    p=[0.12, 0.14, 0.12, 0.14,
+                       0.48 - 0.30 * maturity,      # ghosted
+                       1.0 - (0.12 + 0.14 + 0.12 + 0.14 + 0.48 - 0.30 * maturity)]),
             }
 
             if not converted:
-                latent = (
-                    0.9 * (maturity - 0.3)
-                    + 0.5 * np.log1p(hist_spend) / 12.0
+                # Quarterly conversion HAZARD driven by per-quarter observables
+                # (demo, last action) plus stable brand traits. Negative
+                # intercept keeps ~half the brands from ever converting inside
+                # the window, so the label is a real decision, not timing luck.
+                engaged_action = row["last_action"] in (
+                    "requested_callback", "demo_scheduled", "negotiating",
+                    "uploaded_catalog")
+                hazard = (
+                    -2.10                                        # base reluctance
+                    + 1.8 * (maturity - 0.33) * 3.0              # brand trait
+                    + 0.9 * row["demo_given"]                    # per-quarter signal
+                    + 0.7 * float(engaged_action)                # per-quarter signal
+                    + 0.5 * (row["has_d2c_store"])
+                    + 0.6 * np.log1p(hist_spend) / 12.0
                     + 0.4 * np.log1p(comp_spend) / 14.0
                     + 0.3 * (min(days_since, 180) / 180.0)
-                    + 0.25 * (row["demo_given"])
-                    + 0.2 * (row["has_d2c_store"])
-                    + 0.15 * np.log1p(sessions) / 14.0
-                    - 0.2 * (row["last_action"] == "ghosted")
+                    - 0.4 * (row["last_action"] == "ghosted")
                 )
-                p_convert = 1 / (1 + np.exp(-(latent / 0.85 + rng.normal(0, gen["conversion_noise_sd"]))))
-                if rng.random() < p_convert * 0.35 and q < quarters - 1:
+                p_convert = 1 / (1 + np.exp(-(hazard / 0.55 + rng.normal(0, gen["conversion_noise_sd"]))))
+                if rng.random() < p_convert and q < quarters - 1:
                     converted = True
                     onboard_date = snap + pd.DateOffset(days=onboard_lag)
-                    spend_mean = 90_000 + 550_000 * (latent + 1.2)
+                    spend_mean = 90_000 + 550_000 * (hazard + 1.8)
                     row["converted_next_quarter"] = 1
                     row["spend_90d_inr"] = float(max(
                         gen["min_spend_inr"],

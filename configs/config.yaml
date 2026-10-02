@@ -24,7 +24,7 @@ paths:
 # Synthetic data generation (deterministic; fixed seed => reproducible)
 # ------------------------------------------------------------------
 generation:
-  n_brands: 850                # prospective brands observed per quarter
+  n_brands: 1200               # prospective brands observed per quarter
   quarters: 10                 # quarterly cross-sections (cohort snapshots)
   cohort_start: 2024-01-01     # first snapshot date (quarter start)
   category_share_top3: [0.30, 0.22, 0.16]   # brand-mix concentration
@@ -37,7 +37,7 @@ generation:
     - "Pet Supplies"
     - "Otc & Wellness"
     - "Snacks & Confectionery"
-  conversion_noise_sd: 0.85    # latent-score noise (logistic scale)
+  conversion_noise_sd: 0.30    # latent-score noise (logistic scale)
   spend_shape: 1.8             # gamma shape for spend given conversion
   spend_scale_divisor: 2.6     # scales the gamma mean vs predicted score
   missing_seed_cols: [app_installs_est, organic_search_rank_avg]  # cols injected with NaNs
