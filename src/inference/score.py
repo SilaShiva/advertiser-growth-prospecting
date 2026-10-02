@@ -50,16 +50,20 @@ def score_batch(score_df: pd.DataFrame, models_dir, cfg: dict) -> pd.DataFrame:
         feats = conv["features"]
 
         # Rebuild features for the score batch with the persisted train stats.
+        # build_features re-sorts rows, so ALL downstream columns must be
+        # keyed off X (not score_df) to avoid row-order misalignment.
         from src.features.build_features import build_features
         X = build_features(score_df, stats, cfg)
-        X = X[X["brand_id"].isin(score_df["brand_id"])]
+        X = X[X["brand_id"].isin(score_df["brand_id"])].reset_index(drop=True)
 
         p = conv["model"].predict_proba(X[feats])[:, 1]
         spend_pred = np.expm1(spend["model"].predict(X[feats]))
+        display = score_df.set_index("brand_id").loc[X["brand_id"]].reset_index()
         model_used = f"{conv['name']} + {spend['name']}"
     elif icfg.get("fallbacks", {}).get("enabled"):
         p = _rule_score(score_df, icfg["fallbacks"]["rule_score_weights"])
         spend_pred = np.full(len(score_df), 500_000.0)   # neutral prior
+        display = score_df
         model_used = "rule-based fallback"
     else:
         raise FileNotFoundError(f"model bundles not found in {models_dir} "
@@ -67,15 +71,18 @@ def score_batch(score_df: pd.DataFrame, models_dir, cfg: dict) -> pd.DataFrame:
 
     thr = icfg["conversion_threshold"]
     spend_thr = np.quantile(spend_pred, icfg["spend_percentile_tiers"][0])
+    # Round first, then derive EV from the rounded columns so the CSV is
+    # internally consistent (EV == p_adopt * spend, recomputable by readers).
     out = pd.DataFrame({
-        "brand_id": score_df["brand_id"].to_numpy(),
-        "brand_name": score_df["brand_name"].to_numpy(),
-        "category": score_df["category"].to_numpy(),
-        "snapshot_quarter": score_df["snapshot_quarter"].to_numpy(),
+        "brand_id": display["brand_id"].to_numpy(),
+        "brand_name": display["brand_name"].to_numpy(),
+        "category": display["category"].to_numpy(),
+        "snapshot_quarter": display["snapshot_quarter"].to_numpy(),
         "p_adopt": np.round(p, 4),
         "predicted_spend_90d_inr": np.round(spend_pred, 0),
-        "expected_value_inr": np.round(p * spend_pred, 0),
     })
+    out["expected_value_inr"] = np.round(
+        out["p_adopt"] * out["predicted_spend_90d_inr"], 0)
     out["priority"] = np.where(
         (out["p_adopt"] >= thr) & (out["predicted_spend_90d_inr"] >= spend_thr), 1,
         np.where(out["p_adopt"] >= thr, 2,
