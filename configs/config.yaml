@@ -24,7 +24,7 @@ paths:
 # Synthetic data generation (deterministic; fixed seed => reproducible)
 # ------------------------------------------------------------------
 generation:
-  n_brands: 240                # prospective brands observed per quarter
+  n_brands: 850                # prospective brands observed per quarter
   quarters: 10                 # quarterly cross-sections (cohort snapshots)
   cohort_start: 2024-01-01     # first snapshot date (quarter start)
   category_share_top3: [0.30, 0.22, 0.16]   # brand-mix concentration
@@ -87,9 +87,12 @@ labels:
 
 splits:
   # Snapshot-date based, never random: later quarters are unseen in training.
-  train_quarters: 7            # first 7 snapshots
-  valid_quarters: 2            # next 2
-  test_quarters: 1             # final snapshot = "production batch"
+  # The final quarter(s) are UNLABELED (their outcome quarter hasn't closed);
+  # they are the production scoring batch. Evaluation test = last labeled q.
+  train_quarters: 6            # first 6 snapshots (labeled)
+  valid_quarters: 2            # next 2 (labeled)
+  test_quarters: 1             # last fully-observed snapshot (labeled)
+  score_quarters: 1            # newest snapshot: unlabeled production batch
 
 # ---------------------------------------------------------------------
 # Training
