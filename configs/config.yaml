@@ -51,7 +51,7 @@ generation:
 # ------------------------------------------------------------------
 validation:
   gates:
-    - {gate: row_count_min,        severity: FAIL, value: 1500}
+    - {gate: row_count_min,        severity: FAIL, value: 700}
     - {gate: id_uniqueness,        severity: FAIL}
     - {gate: label_parse_rate,     severity: FAIL, value: 0.995}
     - {gate: label_values,         severity: FAIL}

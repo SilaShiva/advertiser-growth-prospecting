@@ -1,0 +1,53 @@
+{
+  "blocked": false,
+  "results": [
+    {
+      "name": "row_count_min",
+      "severity": "FAIL",
+      "passed": true,
+      "detail": "842 rows (min 700)"
+    },
+    {
+      "name": "id_uniqueness",
+      "severity": "FAIL",
+      "passed": true,
+      "detail": "0 duplicate (brand, quarter) keys"
+    },
+    {
+      "name": "label_parse_rate",
+      "severity": "FAIL",
+      "passed": true,
+      "detail": "1.0000 parseable labels (min 0.995)"
+    },
+    {
+      "name": "label_values",
+      "severity": "FAIL",
+      "passed": true,
+      "detail": "labels in {0,1}"
+    },
+    {
+      "name": "null_share_numeric",
+      "severity": "WARN",
+      "passed": true,
+      "detail": "worst null share 0.058 in 'app_installs_est' (max 0.15)"
+    },
+    {
+      "name": "category_cardinality",
+      "severity": "FAIL",
+      "passed": true,
+      "detail": "8 categories (expected 8)"
+    },
+    {
+      "name": "spend_nonnegative",
+      "severity": "FAIL",
+      "passed": true,
+      "detail": "0 negative spend rows"
+    },
+    {
+      "name": "duplicate_rows",
+      "severity": "WARN",
+      "passed": true,
+      "detail": "0 exact duplicate rows (tolerated 5)"
+    }
+  ]
+}
