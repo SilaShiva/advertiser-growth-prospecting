@@ -40,7 +40,7 @@ generation:
   conversion_noise_sd: 0.85    # latent-score noise (logistic scale)
   spend_shape: 1.8             # gamma shape for spend given conversion
   spend_scale_divisor: 2.6     # scales the gamma mean vs predicted score
-  missing_seed_cols: [teamaov, deliverycoverage]  # cols injected with NaNs
+  missing_seed_cols: [app_installs_est, organic_search_rank_avg]  # cols injected with NaNs
   missing_rate: 0.06
   onboard_lag_days: [12, 75]   # uniform lag between first contact & onboard
   min_spend_inr: 15000         # converted brands spend at least this
