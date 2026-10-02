@@ -1,0 +1,152 @@
+# =====================================================================
+# Advertiser Growth Prospecting Model — project configuration
+# Single source of truth for every stage. Stages read only from here.
+# =====================================================================
+
+project:
+  name: advertiser-growth-prospecting
+  description: >
+    Two-stage model for a quick-commerce ads platform: (1) will a
+    prospective brand convert to a paying advertiser within one quarter,
+    and (2) conditional on converting, its expected first-90-day spend.
+  random_seed: 42
+
+paths:
+  # All resolved relative to the repo root at runtime.
+  raw_dir: data/raw
+  interim_dir: data/interim
+  processed_dir: data/processed
+  models_dir: models
+  reports_dir: reports
+  mlflow_dir: mlruns
+
+# ---------------------------------------------------------------------
+# Synthetic data generation (deterministic; fixed seed => reproducible)
+# ------------------------------------------------------------------
+generation:
+  n_brands: 240                # prospective brands observed per quarter
+  quarters: 10                 # quarterly cross-sections (cohort snapshots)
+  cohort_start: 2024-01-01     # first snapshot date (quarter start)
+  category_share_top3: [0.30, 0.22, 0.16]   # brand-mix concentration
+  categories:
+    - "Packaged Foods"
+    - "Beverages"
+    - "Personal Care"
+    - "Household Care"
+    - "Baby Care"
+    - "Pet Supplies"
+    - "Otc & Wellness"
+    - "Snacks & Confectionery"
+  conversion_noise_sd: 0.85    # latent-score noise (logistic scale)
+  spend_shape: 1.8             # gamma shape for spend given conversion
+  spend_scale_divisor: 2.6     # scales the gamma mean vs predicted score
+  missing_seed_cols: [teamaov, deliverycoverage]  # cols injected with NaNs
+  missing_rate: 0.06
+  onboard_lag_days: [12, 75]   # uniform lag between first contact & onboard
+  min_spend_inr: 15000         # converted brands spend at least this
+  csv_float_fmt: "%.6g"
+
+# ---------------------------------------------------------------------
+# Data-quality gates (FAIL stops the pipeline; WARN only logs)
+# ------------------------------------------------------------------
+validation:
+  gates:
+    - {gate: row_count_min,        severity: FAIL, value: 1500}
+    - {gate: id_uniqueness,        severity: FAIL}
+    - {gate: label_parse_rate,     severity: FAIL, value: 0.995}
+    - {gate: label_values,         severity: FAIL}
+    - {gate: null_share_numeric,   severity: WARN,  value: 0.15}
+    - {gate: category_cardinality, severity: FAIL,  value: 8}
+    - {gate: spend_nonnegative,    severity: FAIL}
+    - {gate: duplicate_rows,       severity: WARN,  value: 5}
+
+# ---------------------------------------------------------------------
+# Feature engineering
+# ------------------------------------------------------------------
+features:
+  categories_top_n: 5          # one-hot cap; rest collapse to "other"
+  log1p_cols:                  # heavy-tailed -> log1p before modeling
+    - web_sessions_90d
+    - maus_est
+    - catalog_skus
+    - historical_ad_spend_inr
+    - competitor_spend_inr
+  engagement_ratios:           # derived, guarded by denominators
+    - [sessions_per_mau, web_sessions_90d, maus_est]
+    - [skus_per_mau, catalog_skus, maus_est]
+    - [spend_intensity, historical_ad_spend_inr, catalog_skus]
+  winsorize_quantiles: [0.005, 0.995]
+  s2s_windows_quarters: [1, 2] # snapshot-over-snapshot deltas
+
+# ---------------------------------------------------------------------
+# Labels & splits (time-based: train on past quarters, test on latest)
+# ------------------------------------------------------------------
+labels:
+  conversion_horizon_quarters: 1   # label = onboarded within next quarter
+  spend_window_days: 90
+
+splits:
+  # Snapshot-date based, never random: later quarters are unseen in training.
+  train_quarters: 7            # first 7 snapshots
+  valid_quarters: 2            # next 2
+  test_quarters: 1             # final snapshot = "production batch"
+
+# ---------------------------------------------------------------------
+# Training
+# ------------------------------------------------------------------
+training:
+  conversion:
+    candidates:
+      lgbm_classifier:
+        params:
+          n_estimators: 400
+          learning_rate: 0.05
+          num_leaves: 31
+          min_child_samples: 25
+          subsample: 0.9
+          colsample_bytree: 0.85
+          reg_lambda: 1.0
+      logreg_l2:
+        params:
+          C: 0.5
+          max_iter: 2000
+      gbt_classifier:
+        params:
+          max_iter: 300
+          learning_rate: 0.06
+          max_leaf_nodes: 31
+          l2_regularization: 1.0
+    selection_metric: pr_auc      # conversion is imbalanced; PR-AUC decides
+    early_stopping_rounds: 50
+  spend:
+    # Trained ONLY on converted brands (positive cohort), log1p target.
+    candidates:
+      lgbm_regressor:
+        params:
+          n_estimators: 400
+          learning_rate: 0.05
+          num_leaves: 31
+          min_child_samples: 20
+          colsample_bytree: 0.85
+          reg_lambda: 1.0
+      hist_gbr:
+        params:
+          max_iter: 400
+          learning_rate: 0.05
+          max_leaf_nodes: 31
+          l2_regularization: 1.0
+    selection_metric: mae_log1p   # MAE on log1p(spend); robust to outliers
+  cv:
+    folds: 4                      # GroupKFold by snapshot quarter
+  mlflow_experiment: advertiser_growth_prospecting
+
+# ---------------------------------------------------------------------
+# Inference / production scoring contract
+# ------------------------------------------------------------------
+inference:
+  conversion_threshold: 0.45    # P(adopt) >= this => priority outreach
+  spend_percentile_tiers: [0.75, 0.40]   # tier 1 / 2 / 3 cutoffs
+  fallbacks:                    # if model artifacts missing: rule-based
+    enabled: true
+    rule_score_weights: {dau_per_mau: 0.25, category_gmv_index: 0.25,
+                         historical_ad_spend_log: 0.20, digital_maturity: 0.30}
