@@ -1,0 +1,18 @@
+# Core
+numpy>=2.0
+pandas>=2.2
+pyarrow>=17.0
+
+# Modeling
+scikit-learn>=1.5
+lightgbm>=4.4
+
+# Experiment tracking
+mlflow>=2.16
+
+# Plotting
+matplotlib>=3.9
+
+# Config & tests
+PyYAML>=6.0
+pytest>=8.0
